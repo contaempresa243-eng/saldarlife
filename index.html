@@ -172,8 +172,9 @@
 
     <div class="cartao">
       <h2>Foto de perfil</h2>
-      <p class="ajuda">A foto aparece no canto do cartão verde da página Hoje. Também podes tocar nela para a mudar.</p>
+      <p class="ajuda">A foto aparece no canto do cartão verde da página Hoje. Também podes tocar nela para a ajustar.</p>
       <button type="button" class="secundario" id="btnMudarFoto">Escolher foto</button>
+      <button type="button" class="secundario" id="btnEditarFoto" hidden>Editar foto (mover e zoom)</button>
       <button type="button" class="secundario" id="btnRemoverFoto" hidden>Remover foto</button>
       <input type="file" id="ficheiroFoto" accept="image/*" hidden>
     </div>
@@ -212,6 +213,23 @@
   <button type="button" data-vista="historico">Histórico</button>
   <button type="button" data-vista="definicoes">Definições</button>
 </nav>
+
+<div id="editorFoto" class="modal" hidden>
+  <div class="modal-caixa" role="dialog" aria-label="Ajustar foto">
+    <h2>Ajustar foto</h2>
+    <div class="recorte">
+      <canvas id="canvasFoto" width="300" height="300"></canvas>
+    </div>
+    <label for="zoomFoto">Zoom</label>
+    <input type="range" id="zoomFoto" min="1" max="4" step="0.01" value="1">
+    <p class="ajuda">Arrasta para mover. Usa a barra ou dois dedos para fazer zoom. O círculo é o que vai aparecer.</p>
+    <div class="modal-botoes">
+      <button type="button" class="secundario" id="btnTrocarFoto">Trocar</button>
+      <button type="button" class="secundario" id="btnCancelarFoto">Cancelar</button>
+      <button type="button" class="principal" id="btnGuardarFoto">Guardar</button>
+    </div>
+  </div>
+</div>
 
 <div id="aviso" class="aviso" role="status" aria-live="polite"></div>
 

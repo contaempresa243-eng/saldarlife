@@ -668,6 +668,7 @@
         }
         if (!Array.isArray(dados) && typeof dados.foto === 'string' && /^data:image\/(jpeg|png|webp);base64,/.test(dados.foto)) {
           escreverLS(KEY_FOTO, dados.foto);
+          try { localStorage.removeItem(KEY_FOTO_ORIG); } catch (e) { /* ignora */ }
           renderAvatar();
         }
         const ids = new Set(vendas.map(v => v.id));
@@ -766,25 +767,75 @@
     img.hidden = !f;
     $('#iconeAvatar').style.display = f ? 'none' : '';
     $('#btnRemoverFoto').hidden = !f;
+    $('#btnEditarFoto').hidden = !f;
   }
 
-  function guardarFoto(ficheiro) {
+  /* ---------- editor da foto: zoom e mover ---------- */
+  const KEY_FOTO_ORIG = 'saldar-life-foto-original';
+  const FOTO_VISTA = 300; // tamanho do recorte no ecrã
+  const ZOOM_MAX = 4;
+  let fotoImg = null;      // imagem que está a ser editada
+  let fotoOrigNova = null; // original escolhido agora, ainda por guardar
+  let fotoCx = 0;
+  let fotoCy = 0;
+  let fotoZoom = 1;
+  let fotoDistAnterior = 0;
+  const fotoPtrs = new Map();
+
+  // O recorte é sempre um quadrado. Com zoom 1 mostra o maior quadrado possível da imagem.
+  const ladoFoto = () => Math.min(fotoImg.width, fotoImg.height) / fotoZoom;
+
+  function desenharFoto(cv, tam) {
+    const l = ladoFoto();
+    const ctx = cv.getContext('2d');
+    ctx.clearRect(0, 0, tam, tam);
+    ctx.drawImage(fotoImg, fotoCx - l / 2, fotoCy - l / 2, l, l, 0, 0, tam, tam);
+  }
+
+  function atualizarEditor() {
+    const l = ladoFoto();
+    fotoCx = Math.min(Math.max(fotoCx, l / 2), fotoImg.width - l / 2);
+    fotoCy = Math.min(Math.max(fotoCy, l / 2), fotoImg.height - l / 2);
+    desenharFoto($('#canvasFoto'), FOTO_VISTA);
+    $('#zoomFoto').value = fotoZoom;
+  }
+
+  function abrirEditor(src, originalNova) {
+    const img = new Image();
+    img.onload = () => {
+      fotoImg = img;
+      fotoOrigNova = originalNova || null;
+      fotoZoom = 1;
+      fotoCx = img.width / 2;
+      fotoCy = img.height / 2;
+      fotoPtrs.clear();
+      $('#editorFoto').hidden = false;
+      atualizarEditor();
+    };
+    img.onerror = () => aviso('Não consegui abrir essa imagem.');
+    img.src = src;
+  }
+
+  function fecharEditor() {
+    $('#editorFoto').hidden = true;
+    fotoImg = null;
+    fotoOrigNova = null;
+    fotoPtrs.clear();
+  }
+
+  // Foto escolhida na galeria: reduz para no máximo 800 px e abre o editor
+  function carregarFicheiroFoto(ficheiro) {
     const url = URL.createObjectURL(ficheiro);
     const img = new Image();
     img.onload = () => {
-      const S = 192; // tamanho pequeno para ocupar pouco espaço
+      const k = Math.min(1, 800 / Math.max(img.width, img.height));
       const c = document.createElement('canvas');
-      c.width = c.height = S;
-      const lado = Math.min(img.width, img.height);
-      c.getContext('2d').drawImage(img, (img.width - lado) / 2, (img.height - lado) / 2, lado, lado, 0, 0, S, S);
+      c.width = Math.round(img.width * k);
+      c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
       URL.revokeObjectURL(url);
-      try {
-        localStorage.setItem(KEY_FOTO, c.toDataURL('image/jpeg', 0.85));
-        renderAvatar();
-        aviso('Foto guardada ✓');
-      } catch (e) {
-        aviso('Não foi possível guardar a foto.');
-      }
+      const dataUrl = c.toDataURL('image/jpeg', 0.85);
+      abrirEditor(dataUrl, dataUrl);
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);
@@ -793,16 +844,105 @@
     img.src = url;
   }
 
-  $('#btnAvatar').addEventListener('click', () => $('#ficheiroFoto').click());
+  function editarFotoAtual() {
+    const src = lerLS(KEY_FOTO_ORIG) || lerLS(KEY_FOTO);
+    if (src) abrirEditor(src, null);
+    else $('#ficheiroFoto').click();
+  }
+
+  function guardarEditorFoto() {
+    if (!fotoImg) return;
+    const c = document.createElement('canvas');
+    c.width = c.height = 256;
+    desenharFoto(c, 256);
+    try {
+      localStorage.setItem(KEY_FOTO, c.toDataURL('image/jpeg', 0.88));
+    } catch (e) {
+      aviso('Não foi possível guardar a foto.');
+      return;
+    }
+    // O original fica guardado para poderes ajustar outra vez sem perder qualidade
+    if (fotoOrigNova) {
+      try { localStorage.setItem(KEY_FOTO_ORIG, fotoOrigNova); } catch (e) { /* ignora */ }
+    }
+    fecharEditor();
+    renderAvatar();
+    aviso('Foto guardada ✓');
+  }
+
+  const distanciaPtrs = () => {
+    if (fotoPtrs.size < 2) return 0;
+    const [a, b] = [...fotoPtrs.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  };
+
+  const cvFoto = $('#canvasFoto');
+
+  cvFoto.addEventListener('pointerdown', e => {
+    if (!fotoImg) return;
+    try { cvFoto.setPointerCapture(e.pointerId); } catch (err) { /* ignora */ }
+    fotoPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    fotoDistAnterior = distanciaPtrs();
+  });
+
+  cvFoto.addEventListener('pointermove', e => {
+    if (!fotoImg || !fotoPtrs.has(e.pointerId)) return;
+    const ant = fotoPtrs.get(e.pointerId);
+    fotoPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (fotoPtrs.size >= 2) {
+      // dois dedos: zoom
+      const d = distanciaPtrs();
+      if (fotoDistAnterior > 0) fotoZoom = Math.min(ZOOM_MAX, Math.max(1, fotoZoom * d / fotoDistAnterior));
+      fotoDistAnterior = d;
+    } else {
+      // um dedo: mover a foto
+      const k = ladoFoto() / cvFoto.getBoundingClientRect().width;
+      fotoCx -= (e.clientX - ant.x) * k;
+      fotoCy -= (e.clientY - ant.y) * k;
+    }
+    atualizarEditor();
+  });
+
+  const soltarFoto = e => {
+    fotoPtrs.delete(e.pointerId);
+    fotoDistAnterior = distanciaPtrs();
+  };
+  cvFoto.addEventListener('pointerup', soltarFoto);
+  cvFoto.addEventListener('pointercancel', soltarFoto);
+
+  cvFoto.addEventListener('wheel', e => {
+    if (!fotoImg) return;
+    e.preventDefault();
+    fotoZoom = Math.min(ZOOM_MAX, Math.max(1, fotoZoom * (e.deltaY < 0 ? 1.08 : 0.92)));
+    atualizarEditor();
+  }, { passive: false });
+
+  $('#zoomFoto').addEventListener('input', e => {
+    if (!fotoImg) return;
+    fotoZoom = parseFloat(e.target.value) || 1;
+    atualizarEditor();
+  });
+
+  $('#btnAvatar').addEventListener('click', () => {
+    if (lerLS(KEY_FOTO)) editarFotoAtual();
+    else $('#ficheiroFoto').click();
+  });
   $('#btnMudarFoto').addEventListener('click', () => $('#ficheiroFoto').click());
+  $('#btnEditarFoto').addEventListener('click', editarFotoAtual);
+  $('#btnTrocarFoto').addEventListener('click', () => $('#ficheiroFoto').click());
+  $('#btnCancelarFoto').addEventListener('click', fecharEditor);
+  $('#btnGuardarFoto').addEventListener('click', guardarEditorFoto);
   $('#ficheiroFoto').addEventListener('change', e => {
     const f = e.target.files[0];
     e.target.value = '';
-    if (f) guardarFoto(f);
+    if (f) carregarFicheiroFoto(f);
   });
   $('#btnRemoverFoto').addEventListener('click', () => {
     if (!confirm('Remover a foto de perfil?')) return;
-    try { localStorage.removeItem(KEY_FOTO); } catch (e) { /* ignora */ }
+    try {
+      localStorage.removeItem(KEY_FOTO);
+      localStorage.removeItem(KEY_FOTO_ORIG);
+    } catch (e) { /* ignora */ }
     renderAvatar();
     aviso('Foto removida');
   });
