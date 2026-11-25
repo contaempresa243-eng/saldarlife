@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="pt-AO">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f766e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Saldar Life">
+<title>Saldar Life</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topo">
+  <div>
+    <h1>Saldar Life</h1>
+    <p id="dataHoje"></p>
+  </div>
+  <span id="estadoRede" class="rede" aria-live="polite"></span>
+</header>
+
+<main>
+
+  <!-- ===== HOJE ===== -->
+  <section id="vista-hoje" class="vista ativa">
+
+    <div id="avisoBackup" class="banner" hidden>
+      <span>Já passou algum tempo desde o último backup.</span>
+      <button type="button" id="btnBackupRapido">Fazer backup</button>
+    </div>
+
+    <div class="cartao total">
+      <button type="button" class="btn-olho" id="btnOlho" aria-label="Ocultar valores" aria-pressed="false"></button>
+      <small>Total vendido hoje</small>
+      <strong id="totalHoje">0 Kz</strong>
+      <span id="nHoje">0 vendas</span>
+      <span class="lucro" id="lucroHoje">Lucro: 0 Kz</span>
+    </div>
+
+    <div class="caixas">
+      <div class="cartao caixa"><small>Dinheiro</small><strong id="hojeDinheiro">0 Kz</strong></div>
+      <div class="cartao caixa"><small>Transferência</small><strong id="hojeTransferencia">0 Kz</strong></div>
+      <div class="cartao caixa"><small>Multicaixa</small><strong id="hojeMulticaixa">0 Kz</strong></div>
+    </div>
+
+    <form id="form" class="cartao" autocomplete="off">
+      <h2>Nova venda</h2>
+
+      <div class="campo">
+        <label>Tipo</label>
+        <div class="seg" id="segTipo">
+          <button type="button" data-tipo="Recarga" aria-pressed="true">Recarga</button>
+          <button type="button" data-tipo="Cartão" aria-pressed="false">Cartão físico</button>
+        </div>
+      </div>
+
+      <div class="campo">
+        <label for="operadora" id="rotuloOperadora">Operadora</label>
+        <select id="operadora"></select>
+      </div>
+
+      <div class="campo" id="campoNumero">
+        <label for="numero">Número do cliente <span class="obrig">obrigatório</span></label>
+        <input id="numero" type="tel" inputmode="numeric" maxlength="22" placeholder="9XX XXX XXX">
+      </div>
+
+      <div class="campo">
+        <label for="valor">Valor (Kz)</label>
+        <div class="valor-caixa">
+          <input id="valor" type="number" inputmode="decimal" step="any" min="0" placeholder="0">
+          <button type="submit" class="btn-carrinho" aria-label="Adicionar ao carrinho">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+            <span id="badgeCarrinho" class="badge" hidden></span>
+          </button>
+        </div>
+      </div>
+
+    </form>
+
+    <div id="carrinho" class="cartao carrinho" hidden>
+      <h2>Carrinho <span id="nCarrinho"></span></h2>
+      <ul id="listaCarrinho" class="lista"></ul>
+
+      <div class="carrinho-total">
+        <span>Total</span>
+        <strong id="totalCarrinho">0 Kz</strong>
+      </div>
+
+      <div class="campo">
+        <label>Pagamento</label>
+        <div class="seg" id="segPag">
+          <button type="button" data-pag="Dinheiro" aria-pressed="true">Dinheiro</button>
+          <button type="button" data-pag="Transferência" aria-pressed="false">Transferência</button>
+          <button type="button" data-pag="Multicaixa" aria-pressed="false">Multicaixa</button>
+        </div>
+      </div>
+
+      <div class="finalizar-caixa" id="finalizarCaixa">
+        <button type="button" class="principal" id="btnFinalizar">Finalizar venda</button>
+        <button type="button" class="btn-lixeira" id="btnEsvaziar" aria-label="Esvaziar carrinho" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <button type="button" id="btnFlutuante" class="flutuante" hidden></button>
+
+    <h2 class="titulo-lista">Vendas de hoje</h2>
+    <ul id="listaHoje" class="lista"></ul>
+  </section>
+
+  <!-- ===== HISTÓRICO ===== -->
+  <section id="vista-historico" class="vista">
+    <div class="cartao">
+      <label for="filtro">Período</label>
+      <select id="filtro">
+        <option value="hoje">Hoje</option>
+        <option value="7" selected>Últimos 7 dias</option>
+        <option value="mes">Este mês</option>
+        <option value="tudo">Tudo</option>
+      </select>
+    </div>
+
+    <div class="cartao total">
+      <small>Total do período</small>
+      <strong id="totalPeriodo">0 Kz</strong>
+      <span id="nPeriodo">0 vendas</span>
+      <span class="lucro" id="lucroPeriodo">Lucro: 0 Kz</span>
+    </div>
+
+    <div class="caixas">
+      <div class="cartao caixa"><small>Dinheiro</small><strong id="perDinheiro">0 Kz</strong></div>
+      <div class="cartao caixa"><small>Transferência</small><strong id="perTransferencia">0 Kz</strong></div>
+      <div class="cartao caixa"><small>Multicaixa</small><strong id="perMulticaixa">0 Kz</strong></div>
+    </div>
+
+    <div id="listaHistorico"></div>
+  </section>
+
+  <!-- ===== DEFINIÇÕES ===== -->
+  <section id="vista-definicoes" class="vista">
+    <div class="cartao">
+      <h2>Backup</h2>
+      <p class="ajuda">Os dados ficam só neste telemóvel. Guarda um backup de vez em quando (ex.: envia o ficheiro para o WhatsApp ou e-mail).</p>
+      <p class="ajuda" id="ultimoBackup"></p>
+      <button type="button" class="secundario" id="btnExportar">Exportar backup (.json)</button>
+      <button type="button" class="secundario" id="btnImportar">Importar backup</button>
+      <input type="file" id="ficheiroImport" accept=".json,application/json" hidden>
+    </div>
+
+    <div class="cartao">
+      <h2>Folha de cálculo</h2>
+      <p class="ajuda">Exporta todas as vendas num ficheiro .csv que abre no Excel ou Google Sheets.</p>
+      <button type="button" class="secundario" id="btnCSV">Exportar vendas (.csv)</button>
+    </div>
+
+    <div class="cartao">
+      <h2>Margem de lucro</h2>
+      <p class="ajuda">Percentagem que ganhas em cada produto. O lucro de uma venda é o valor × a margem. Cada venda guarda a margem do momento em que foi feita.</p>
+      <div id="listaMargens"></div>
+    </div>
+
+    <div class="cartao">
+      <h2>Cartões físicos: custo do pacote</h2>
+      <p class="ajuda">Põe quanto pagas por um pacote e quantos cartões vêm nele. O lucro por cartão é o preço de venda menos o custo de um cartão. Ex.: Africell 200, pacote de 25 por 4650 Kz: cada cartão custa 186 Kz e dá 14 Kz de lucro.</p>
+      <div id="listaPacotes"></div>
+    </div>
+
+    <div class="cartao perigo">
+      <h2>Apagar tudo</h2>
+      <p class="ajuda">Remove todas as vendas deste telemóvel. Não dá para desfazer.</p>
+      <button type="button" class="apagar-tudo" id="btnApagarTudo">Apagar todas as vendas</button>
+    </div>
+
+    <p class="rodape">Saldar Life · versão 1 · funciona sem internet</p>
+  </section>
+
+</main>
+
+<nav class="menu" aria-label="Navegação">
+  <button type="button" data-vista="hoje" class="ativo">Hoje</button>
+  <button type="button" data-vista="historico">Histórico</button>
+  <button type="button" data-vista="definicoes">Definições</button>
+</nav>
+
+<div id="aviso" class="aviso" role="status" aria-live="polite"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
