@@ -738,6 +738,34 @@
     renderHoje();
   });
 
+  /* ---------- tela cheia (Definições) ---------- */
+  const elTela = document.documentElement;
+  const emTela = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  const pedirTela = elTela.requestFullscreen || elTela.webkitRequestFullscreen;
+  const sairTela = document.exitFullscreen || document.webkitExitFullscreen;
+
+  function atualizarTela() {
+    $('#btnTelaCheia').textContent = emTela() ? 'Sair da tela cheia' : 'Ativar tela cheia';
+  }
+
+  if (!pedirTela) {
+    // Navegador sem suporte (ex.: iPhone): explica em vez de esconder
+    $('#btnTelaCheia').disabled = true;
+    $('#btnTelaCheia').textContent = 'Não disponível neste navegador';
+  }
+
+  $('#btnTelaCheia').addEventListener('click', () => {
+    try {
+      const r = emTela() ? sairTela.call(document) : pedirTela.call(elTela);
+      if (r && r.catch) r.catch(() => aviso('Não foi possível mudar o modo de ecrã.'));
+    } catch (e) {
+      aviso('Não foi possível mudar o modo de ecrã.');
+    }
+  });
+
+  document.addEventListener('fullscreenchange', atualizarTela);
+  document.addEventListener('webkitfullscreenchange', atualizarTela);
+
   /* ---------- estado da rede ---------- */
   function atualizarRede() {
     const el = $('#estadoRede');
