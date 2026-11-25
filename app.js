@@ -8,6 +8,8 @@
   const KEY_MARGENS = 'saldar-life-margens';
   const KEY_PACOTES = 'saldar-life-pacotes';
   const KEY_OCULTO = 'saldar-life-oculto';
+  const KEY_OCULTO_LUCRO = 'saldar-life-oculto-lucro';
+  const KEY_FOTO = 'saldar-life-foto';
 
   // Cartões: custo do pacote e quantos cartões vêm nele. Lucro por cartão = valor - custo / quantidade.
   const PACOTES_PADRAO = { 'Africell 200': { custo: 4650, qtd: 25 } };
@@ -24,7 +26,8 @@
   let carrinho = carregarCarrinho();
   let margens = carregarMargens();
   let pacotes = carregarPacotes();
-  let oculto = lerLS(KEY_OCULTO) === '1';
+  let ocultoTotal = lerLS(KEY_OCULTO) === '1';
+  let ocultoLucro = lerLS(KEY_OCULTO_LUCRO) === '1';
   let tipo = 'Recarga';
   let pagamento = 'Dinheiro';
   let carrinhoVisivel = false;
@@ -208,9 +211,9 @@
   function renderHoje() {
     const lista = vendas.filter(v => chave(v.ts) === hoje()).sort((a, b) => b.ts - a.ts);
     const t = somar(lista);
-    $('#totalHoje').textContent = oculto ? '•••••• Kz' : kz(t.total);
+    $('#totalHoje').textContent = ocultoTotal ? '•••••• Kz' : kz(t.total);
     $('#nHoje').textContent = plural(t.n);
-    $('#lucroHoje').textContent = 'Lucro: ' + (oculto ? '••••' : kz(t.lucro));
+    $('#lucroHoje').textContent = ocultoLucro ? '•••••• Kz' : kz(t.lucro);
     $('#hojeDinheiro').textContent = kz(t.Dinheiro);
     $('#hojeTransferencia').textContent = kz(t['Transferência']);
     $('#hojeMulticaixa').textContent = kz(t.Multicaixa);
@@ -625,7 +628,7 @@
 
   function exportarBackup() {
     if (!vendas.length) { aviso('Ainda não há vendas para guardar.'); return; }
-    const dados = { app: 'saldar-life', versao: 4, exportado: new Date().toISOString(), margens, pacotes, vendas };
+    const dados = { app: 'saldar-life', versao: 4, exportado: new Date().toISOString(), margens, pacotes, foto: lerLS(KEY_FOTO) || '', vendas };
     baixar('saldar-life-backup-' + hoje() + '.json', JSON.stringify(dados, null, 2), 'application/json');
     escreverLS(KEY_BACKUP, String(Date.now()));
     aviso('Backup criado ✓');
@@ -662,6 +665,10 @@
           }
           guardarPacotes();
           renderPacotes();
+        }
+        if (!Array.isArray(dados) && typeof dados.foto === 'string' && /^data:image\/(jpeg|png|webp);base64,/.test(dados.foto)) {
+          escreverLS(KEY_FOTO, dados.foto);
+          renderAvatar();
         }
         const ids = new Set(vendas.map(v => v.id));
         let novas = 0;
@@ -724,18 +731,80 @@
   const ICONE_OLHO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
   const ICONE_OLHO_FECHADO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
 
-  function atualizarOlho() {
-    const b = $('#btnOlho');
-    b.innerHTML = oculto ? ICONE_OLHO_FECHADO : ICONE_OLHO;
-    b.setAttribute('aria-label', oculto ? 'Mostrar valores' : 'Ocultar valores');
-    b.setAttribute('aria-pressed', String(oculto));
+  function pintarOlho(id, escondido, nome) {
+    const b = $(id);
+    b.innerHTML = escondido ? ICONE_OLHO_FECHADO : ICONE_OLHO;
+    b.setAttribute('aria-label', (escondido ? 'Mostrar ' : 'Ocultar ') + nome);
+    b.setAttribute('aria-pressed', String(escondido));
   }
 
-  $('#btnOlho').addEventListener('click', () => {
-    oculto = !oculto;
-    escreverLS(KEY_OCULTO, oculto ? '1' : '0');
-    atualizarOlho();
+  function atualizarOlhos() {
+    pintarOlho('#btnOlhoTotal', ocultoTotal, 'total');
+    pintarOlho('#btnOlhoLucro', ocultoLucro, 'lucro');
+  }
+
+  // Cada olho funciona sozinho: um esconde o total, o outro esconde o lucro
+  $('#btnOlhoTotal').addEventListener('click', () => {
+    ocultoTotal = !ocultoTotal;
+    escreverLS(KEY_OCULTO, ocultoTotal ? '1' : '0');
+    atualizarOlhos();
     renderHoje();
+  });
+
+  $('#btnOlhoLucro').addEventListener('click', () => {
+    ocultoLucro = !ocultoLucro;
+    escreverLS(KEY_OCULTO_LUCRO, ocultoLucro ? '1' : '0');
+    atualizarOlhos();
+    renderHoje();
+  });
+
+  /* ---------- foto de perfil ---------- */
+  function renderAvatar() {
+    const f = lerLS(KEY_FOTO);
+    const img = $('#imgAvatar');
+    if (f) img.src = f; else img.removeAttribute('src');
+    img.hidden = !f;
+    $('#iconeAvatar').style.display = f ? 'none' : '';
+    $('#btnRemoverFoto').hidden = !f;
+  }
+
+  function guardarFoto(ficheiro) {
+    const url = URL.createObjectURL(ficheiro);
+    const img = new Image();
+    img.onload = () => {
+      const S = 192; // tamanho pequeno para ocupar pouco espaço
+      const c = document.createElement('canvas');
+      c.width = c.height = S;
+      const lado = Math.min(img.width, img.height);
+      c.getContext('2d').drawImage(img, (img.width - lado) / 2, (img.height - lado) / 2, lado, lado, 0, 0, S, S);
+      URL.revokeObjectURL(url);
+      try {
+        localStorage.setItem(KEY_FOTO, c.toDataURL('image/jpeg', 0.85));
+        renderAvatar();
+        aviso('Foto guardada ✓');
+      } catch (e) {
+        aviso('Não foi possível guardar a foto.');
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      aviso('Não consegui abrir essa imagem.');
+    };
+    img.src = url;
+  }
+
+  $('#btnAvatar').addEventListener('click', () => $('#ficheiroFoto').click());
+  $('#btnMudarFoto').addEventListener('click', () => $('#ficheiroFoto').click());
+  $('#ficheiroFoto').addEventListener('change', e => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (f) guardarFoto(f);
+  });
+  $('#btnRemoverFoto').addEventListener('click', () => {
+    if (!confirm('Remover a foto de perfil?')) return;
+    try { localStorage.removeItem(KEY_FOTO); } catch (e) { /* ignora */ }
+    renderAvatar();
+    aviso('Foto removida');
   });
 
   /* ---------- tela cheia (Definições) ---------- */
@@ -789,7 +858,8 @@
   montarOperadoras();
   renderMargens();
   renderPacotes();
-  atualizarOlho();
+  atualizarOlhos();
+  renderAvatar();
   renderTudo();
 
   // Se a data mudar com a app aberta (passou da meia-noite), atualiza ao voltar à app

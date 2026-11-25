@@ -33,12 +33,24 @@
       <button type="button" id="btnBackupRapido">Fazer backup</button>
     </div>
 
-    <div class="cartao total">
-      <button type="button" class="btn-olho" id="btnOlho" aria-label="Ocultar valores" aria-pressed="false"></button>
-      <small>Total vendido hoje</small>
-      <strong id="totalHoje">0 Kz</strong>
-      <span id="nHoje">0 vendas</span>
-      <span class="lucro" id="lucroHoje">Lucro: 0 Kz</span>
+    <div class="cartao total painel">
+      <div class="painel-topo">
+        <button type="button" class="avatar" id="btnAvatar" aria-label="Foto de perfil">
+          <img id="imgAvatar" alt="" hidden>
+          <svg id="iconeAvatar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </button>
+      </div>
+      <div class="painel-colunas">
+        <div class="col">
+          <div class="rotulo">Total vendido hoje <button type="button" class="btn-olho" id="btnOlhoTotal" aria-label="Ocultar total" aria-pressed="false"></button></div>
+          <strong id="totalHoje">0 Kz</strong>
+          <span id="nHoje">0 vendas</span>
+        </div>
+        <div class="col dir">
+          <div class="rotulo">Lucro <button type="button" class="btn-olho" id="btnOlhoLucro" aria-label="Ocultar lucro" aria-pressed="false"></button></div>
+          <strong id="lucroHoje">0 Kz</strong>
+        </div>
+      </div>
     </div>
 
     <div class="caixas">
@@ -156,6 +168,14 @@
       <h2>Folha de cálculo</h2>
       <p class="ajuda">Exporta todas as vendas num ficheiro .csv que abre no Excel ou Google Sheets.</p>
       <button type="button" class="secundario" id="btnCSV">Exportar vendas (.csv)</button>
+    </div>
+
+    <div class="cartao">
+      <h2>Foto de perfil</h2>
+      <p class="ajuda">A foto aparece no canto do cartão verde da página Hoje. Também podes tocar nela para a mudar.</p>
+      <button type="button" class="secundario" id="btnMudarFoto">Escolher foto</button>
+      <button type="button" class="secundario" id="btnRemoverFoto" hidden>Remover foto</button>
+      <input type="file" id="ficheiroFoto" accept="image/*" hidden>
     </div>
 
     <div class="cartao" id="cartaoTela">
