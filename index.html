@@ -135,6 +135,10 @@
         <option value="mes">Este mês</option>
         <option value="tudo">Tudo</option>
       </select>
+      <div id="campoTelefone" hidden>
+        <label for="filtroTelefone" class="rotulo-sep">Telefone</label>
+        <select id="filtroTelefone"></select>
+      </div>
     </div>
 
     <div class="cartao total">
@@ -150,18 +154,28 @@
       <div class="cartao caixa"><small>Multicaixa</small><strong id="perMulticaixa">0 Kz</strong></div>
     </div>
 
+    <div id="porTelefone"></div>
+
     <div id="listaHistorico"></div>
   </section>
 
   <!-- ===== DEFINIÇÕES ===== -->
   <section id="vista-definicoes" class="vista">
     <div class="cartao">
-      <h2>Backup</h2>
-      <p class="ajuda">Os dados ficam só neste telemóvel. Guarda um backup de vez em quando (ex.: envia o ficheiro para o WhatsApp ou e-mail).</p>
+      <h2>Este telefone</h2>
+      <p class="ajuda">Dá um nome a este telefone (ex.: Loja 2). Quando enviares as vendas ao administrador, elas aparecem no Histórico dele com este nome.</p>
+      <label for="nomeTel">Nome</label>
+      <input id="nomeTel" type="text" maxlength="30" placeholder="Ex.: Loja 2">
+    </div>
+
+    <div class="cartao">
+      <h2>Backup e envio</h2>
+      <p class="ajuda">Os dados ficam só neste telemóvel. <b>Enviar para o administrador</b> abre o menu de partilha (WhatsApp, e-mail…). O administrador usa <b>Importar backup</b> e vê as vendas deste telefone no Histórico dele.</p>
       <p class="ajuda" id="ultimoBackup"></p>
+      <button type="button" class="secundario" id="btnEnviar">Enviar para o administrador</button>
       <button type="button" class="secundario" id="btnExportar">Exportar backup (.json)</button>
       <button type="button" class="secundario" id="btnImportar">Importar backup</button>
-      <input type="file" id="ficheiroImport" accept=".json,application/json" hidden>
+      <input type="file" id="ficheiroImport" accept=".json,.txt,application/json,text/plain" hidden>
     </div>
 
     <div class="cartao">

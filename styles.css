@@ -137,6 +137,22 @@ h2 { font-size: 17px; margin: 0 0 12px; }
 
 button.secundario[hidden] { display: none; }
 
+.rotulo-sep { margin-top: 12px; }
+.tel-resumo { padding: 12px 14px; }
+.tel-resumo h3 { margin: 0 0 6px; font-size: 15px; }
+.tel-linha {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--borda);
+}
+.tel-linha:first-of-type { border-top: 0; }
+.tel-linha strong { display: block; font-size: 15px; }
+.tel-linha small { color: var(--suave); font-size: 12.5px; }
+.tel-linha b { font-size: 16px; white-space: nowrap; }
+
 /* editor da foto */
 .modal {
   position: fixed;

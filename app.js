@@ -10,6 +10,8 @@
   const KEY_OCULTO = 'saldar-life-oculto';
   const KEY_OCULTO_LUCRO = 'saldar-life-oculto-lucro';
   const KEY_FOTO = 'saldar-life-foto';
+  const KEY_TEL = 'saldar-life-tel';
+  const KEY_NOME = 'saldar-life-nome';
 
   // Cartões: custo do pacote e quantos cartões vêm nele. Lucro por cartão = valor - custo / quantidade.
   const PACOTES_PADRAO = { 'Africell 200': { custo: 4650, qtd: 25 } };
@@ -112,6 +114,17 @@
 
   const gerarId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
+  // Identificação deste telefone: um código fixo + um nome escolhido por ti
+  let nomeTel = lerLS(KEY_NOME) || '';
+  let meuTel = lerLS(KEY_TEL);
+  if (!meuTel) {
+    meuTel = 't' + gerarId();
+    escreverLS(KEY_TEL, meuTel);
+  }
+  // Vendas feitas neste telefone (ou antigas, sem código) são "minhas"; as importadas vêm de outro
+  const ehMinha = v => !v.tel || v.tel === meuTel;
+  const origemDe = v => (ehMinha(v) ? (nomeTel || 'Este telefone') : (v.origem || 'Importado'));
+
   // Aceita 923456789, 923 456 789, +244 923 456 789, 00244923456789
   function normalizarNumero(txt) {
     let d = String(txt || '').replace(/\D/g, '');
@@ -209,7 +222,8 @@
   }
 
   function renderHoje() {
-    const lista = vendas.filter(v => chave(v.ts) === hoje()).sort((a, b) => b.ts - a.ts);
+    // "Hoje" mostra só as vendas deste telefone; as dos outros telefones ficam no Histórico
+    const lista = vendas.filter(v => ehMinha(v) && chave(v.ts) === hoje()).sort((a, b) => b.ts - a.ts);
     const t = somar(lista);
     $('#totalHoje').textContent = ocultoTotal ? '•••••• Kz' : kz(t.total);
     $('#nHoje').textContent = plural(t.n);
@@ -238,7 +252,36 @@
   }
 
   function renderHistorico() {
-    const lista = filtrar($('#filtro').value).sort((a, b) => b.ts - a.ts);
+    // filtro por telefone: só aparece quando há vendas de mais de um telefone
+    const origens = [...new Set(vendas.map(origemDe))].sort();
+    const selTel = $('#filtroTelefone');
+    const escolhido = selTel.value;
+    $('#campoTelefone').hidden = origens.length < 2;
+    selTel.innerHTML = '<option value="">Todos os telefones</option>' +
+      origens.map(o => '<option value="' + esc(o) + '">' + esc(o) + '</option>').join('');
+    selTel.value = origens.includes(escolhido) ? escolhido : '';
+
+    let lista = filtrar($('#filtro').value).sort((a, b) => b.ts - a.ts);
+    if (origens.length > 1 && selTel.value) lista = lista.filter(v => origemDe(v) === selTel.value);
+
+    // resumo por telefone (só com "Todos os telefones")
+    let resumo = '';
+    if (origens.length > 1 && !selTel.value && lista.length) {
+      const porTel = new Map();
+      for (const v of lista) {
+        const o = origemDe(v);
+        if (!porTel.has(o)) porTel.set(o, []);
+        porTel.get(o).push(v);
+      }
+      resumo = '<div class="cartao tel-resumo"><h3>Por telefone</h3>' +
+        [...porTel.entries()].map(([o, vs]) => {
+          const s = somar(vs);
+          return '<div class="tel-linha"><div><strong>' + esc(o) + '</strong><small>' + plural(s.n) +
+            ' · lucro ' + kz(s.lucro) + '</small></div><b>' + kz(s.total) + '</b></div>';
+        }).join('') + '</div>';
+    }
+    $('#porTelefone').innerHTML = resumo;
+
     const t = somar(lista);
     $('#totalPeriodo').textContent = kz(t.total);
     $('#nPeriodo').textContent = plural(t.n);
@@ -468,6 +511,7 @@
       const v = {
         id: gerarId(),
         lote,
+        tel: meuTel,
         ts: base + i,
         tipo: it.tipo,
         operadora: it.operadora,
@@ -530,6 +574,15 @@
   });
 
   $('#filtro').addEventListener('change', renderHistorico);
+  $('#filtroTelefone').addEventListener('change', renderHistorico);
+
+  $('#nomeTel').addEventListener('change', e => {
+    nomeTel = e.target.value.trim().slice(0, 30);
+    e.target.value = nomeTel;
+    escreverLS(KEY_NOME, nomeTel);
+    aviso('Nome guardado ✓');
+    renderTudo();
+  });
 
   /* ---------- margem de lucro (Definições) ---------- */
   const NOMES_MARGEM = {
@@ -614,7 +667,28 @@
   });
 
   /* ---------- backup, importar, CSV ---------- */
+  // Dentro do APK não há "descarregar": usa o menu de partilha do Android (guardar, WhatsApp, e-mail…)
+  const nativo = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  let pluginFS = null;
+  let pluginShare = null;
+
+  async function partilharNativo(nome, texto, titulo) {
+    pluginFS = pluginFS || window.Capacitor.registerPlugin('Filesystem');
+    pluginShare = pluginShare || window.Capacitor.registerPlugin('Share');
+    await pluginFS.writeFile({ path: nome, data: texto, directory: 'CACHE', encoding: 'utf8' });
+    const r = await pluginFS.getUri({ path: nome, directory: 'CACHE' });
+    await pluginShare.share({ title: titulo || nome, url: r.uri, dialogTitle: titulo || 'Guardar ou enviar' });
+  }
+
+  const foiCancelado = err => /cancel/i.test(String((err && (err.message || err.name)) || err));
+
   function baixar(nome, texto, mime) {
+    if (nativo()) {
+      partilharNativo(nome, texto).catch(err => {
+        if (!foiCancelado(err)) aviso('Não foi possível guardar o ficheiro.');
+      });
+      return;
+    }
     const blob = new Blob([texto], { type: mime });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -626,17 +700,79 @@
     setTimeout(() => URL.revokeObjectURL(url), 3000);
   }
 
-  function exportarBackup() {
-    if (!vendas.length) { aviso('Ainda não há vendas para guardar.'); return; }
-    const dados = { app: 'saldar-life', versao: 4, exportado: new Date().toISOString(), margens, pacotes, foto: lerLS(KEY_FOTO) || '', vendas };
-    baixar('saldar-life-backup-' + hoje() + '.json', JSON.stringify(dados, null, 2), 'application/json');
+  // As vendas deste telefone vão marcadas com o código e o nome dele; as importadas mantêm a origem delas
+  function montarBackup() {
+    const marcadas = vendas.map(v => (ehMinha(v) ? Object.assign({}, v, { tel: meuTel, origem: nomeTel || 'Sem nome' }) : v));
+    return {
+      app: 'saldar-life', versao: 5, exportado: new Date().toISOString(),
+      tel: meuTel, nome: nomeTel, margens, pacotes, foto: lerLS(KEY_FOTO) || '', vendas: marcadas
+    };
+  }
+
+  function marcarBackupFeito() {
     escreverLS(KEY_BACKUP, String(Date.now()));
-    aviso('Backup criado ✓');
     renderDefinicoes();
     renderAvisoBackup();
   }
 
+  function exportarBackup() {
+    if (!vendas.length) { aviso('Ainda não há vendas para guardar.'); return; }
+    baixar('saldar-life-backup-' + hoje() + '.json', JSON.stringify(montarBackup(), null, 2), 'application/json');
+    marcarBackupFeito();
+    aviso('Backup criado ✓');
+  }
+
+  async function enviarAdmin() {
+    if (!vendas.length) { aviso('Ainda não há vendas para enviar.'); return; }
+    if (!nomeTel) {
+      const n = prompt('Dá um nome a este telefone (ex.: Loja 2):');
+      if (n === null) return;
+      nomeTel = n.trim().slice(0, 30);
+      if (nomeTel) {
+        escreverLS(KEY_NOME, nomeTel);
+        $('#nomeTel').value = nomeTel;
+        renderTudo();
+      }
+    }
+    const slug = (nomeTel || 'telefone').normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'telefone';
+    const base = 'saldar-life-' + slug + '-' + hoje();
+    const texto = JSON.stringify(montarBackup());
+    const titulo = 'Vendas ' + (nomeTel || 'do telefone');
+
+    if (nativo()) {
+      try {
+        await partilharNativo(base + '.json', texto, titulo);
+        marcarBackupFeito();
+      } catch (err) {
+        if (!foiCancelado(err)) aviso('Não foi possível partilhar.');
+      }
+      return;
+    }
+
+    if (navigator.share && navigator.canShare) {
+      for (const [ext, tipo] of [['json', 'application/json'], ['txt', 'text/plain']]) {
+        const f = new File([texto], base + '.' + ext, { type: tipo });
+        if (!navigator.canShare({ files: [f] })) continue;
+        try {
+          await navigator.share({ files: [f], title: titulo });
+          marcarBackupFeito();
+          aviso('Enviado ✓');
+        } catch (err) {
+          if (!err || err.name !== 'AbortError') aviso('Não foi possível partilhar.');
+        }
+        return;
+      }
+    }
+
+    // sem menu de partilha: descarrega o ficheiro para o enviares tu
+    baixar(base + '.json', texto, 'application/json');
+    marcarBackupFeito();
+    aviso('Ficheiro criado: envia-o ao administrador.');
+  }
+
   $('#btnExportar').addEventListener('click', exportarBackup);
+  $('#btnEnviar').addEventListener('click', enviarAdmin);
   $('#btnBackupRapido').addEventListener('click', exportarBackup);
 
   $('#btnImportar').addEventListener('click', () => $('#ficheiroImport').click());
@@ -651,7 +787,9 @@
         const dados = JSON.parse(leitor.result);
         const lista = Array.isArray(dados) ? dados : dados.vendas;
         if (!Array.isArray(lista)) throw new Error('formato');
-        if (!Array.isArray(dados) && dados.margens && typeof dados.margens === 'object') {
+        // Ficheiro de outro telefone: só entram as vendas. Margens, custos e foto continuam os teus.
+        const doutro = !Array.isArray(dados) && typeof dados.tel === 'string' && dados.tel !== '' && dados.tel !== meuTel;
+        if (!doutro && !Array.isArray(dados) && dados.margens && typeof dados.margens === 'object') {
           for (const [k, m] of Object.entries(dados.margens)) {
             const n = Number(m);
             if (Number.isFinite(n) && n >= 0 && n <= 100) margens[k] = n;
@@ -659,14 +797,14 @@
           guardarMargens();
           renderMargens();
         }
-        if (!Array.isArray(dados) && dados.pacotes && typeof dados.pacotes === 'object') {
+        if (!doutro && !Array.isArray(dados) && dados.pacotes && typeof dados.pacotes === 'object') {
           for (const [k, p] of Object.entries(dados.pacotes)) {
             if (p && p.custo >= 0 && p.qtd >= 1) pacotes[k] = { custo: Number(p.custo), qtd: Math.round(p.qtd) };
           }
           guardarPacotes();
           renderPacotes();
         }
-        if (!Array.isArray(dados) && typeof dados.foto === 'string' && /^data:image\/(jpeg|png|webp);base64,/.test(dados.foto)) {
+        if (!doutro && !Array.isArray(dados) && typeof dados.foto === 'string' && /^data:image\/(jpeg|png|webp);base64,/.test(dados.foto)) {
           escreverLS(KEY_FOTO, dados.foto);
           try { localStorage.removeItem(KEY_FOTO_ORIG); } catch (e) { /* ignora */ }
           renderAvatar();
@@ -689,13 +827,19 @@
           if (typeof v.lote === 'string' && v.lote) nova.lote = v.lote;
           if (typeof v.margem === 'number' && v.margem >= 0 && v.margem <= 100) nova.margem = v.margem;
           if (typeof v.lucro === 'number' && Number.isFinite(v.lucro)) nova.lucro = v.lucro;
+          // de que telefone veio
+          const telV = typeof v.tel === 'string' && v.tel ? v.tel : (doutro ? dados.tel : '');
+          if (telV) nova.tel = telV;
+          if (telV && telV !== meuTel) nova.origem = String(v.origem || dados.nome || 'Importado').slice(0, 30);
           vendas.push(nova);
           ids.add(v.id);
           novas++;
         }
         guardar();
         renderTudo();
-        aviso(novas ? novas + ' vendas importadas ✓' : 'Nada de novo para importar.');
+        aviso(novas
+          ? novas + (novas === 1 ? ' venda importada' : ' vendas importadas') + (doutro && dados.nome ? ' de ' + dados.nome : '') + ' ✓'
+          : 'Nada de novo para importar.');
       } catch (err) {
         aviso('Ficheiro inválido.');
       }
@@ -707,10 +851,10 @@
   $('#btnCSV').addEventListener('click', () => {
     if (!vendas.length) { aviso('Ainda não há vendas.'); return; }
     const campo = s => '"' + String(s).replace(/"/g, '""') + '"';
-    const linhas = ['data;hora;tipo;operadora;numero;valor;lucro;pagamento;nota;venda'];
+    const linhas = ['data;hora;tipo;operadora;numero;valor;lucro;pagamento;nota;venda;telefone'];
     for (const v of vendas.slice().sort((a, b) => a.ts - b.ts)) {
       const lucro = String(Math.round(lucroDe(v) * 100) / 100).replace('.', ',');
-      linhas.push([chave(v.ts), hora(v.ts), v.tipo, v.operadora, v.numero || '', String(v.valor).replace('.', ','), lucro, v.pagamento, v.nota, chaveVenda(v)]
+      linhas.push([chave(v.ts), hora(v.ts), v.tipo, v.operadora, v.numero || '', String(v.valor).replace('.', ','), lucro, v.pagamento, v.nota, chaveVenda(v), origemDe(v)]
         .map(campo).join(';'));
     }
     baixar('saldar-life-vendas-' + hoje() + '.csv', '﻿' + linhas.join('\n'), 'text/csv;charset=utf-8');
@@ -1000,6 +1144,7 @@
   renderPacotes();
   atualizarOlhos();
   renderAvatar();
+  $('#nomeTel').value = nomeTel;
   renderTudo();
 
   // Se a data mudar com a app aberta (passou da meia-noite), atualiza ao voltar à app
