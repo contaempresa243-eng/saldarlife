@@ -49,11 +49,20 @@ jobs:
       - name: Pôr o ícone da app
         run: |
           RES=android/app/src/main/res
+          if command -v magick >/dev/null 2>&1; then
+            IM=magick
+          elif command -v convert >/dev/null 2>&1; then
+            IM=convert
+          else
+            sudo apt-get update
+            sudo apt-get install -y imagemagick
+            IM=convert
+          fi
           rm -rf $RES/mipmap-anydpi-v26
           for par in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
             d=${par%%:*}
             s=${par##*:}
-            convert icon-512.png -resize ${s}x${s} $RES/mipmap-$d/ic_launcher.png
+            $IM icon-512.png -resize ${s}x${s} $RES/mipmap-$d/ic_launcher.png
             cp $RES/mipmap-$d/ic_launcher.png $RES/mipmap-$d/ic_launcher_round.png
             rm -f $RES/mipmap-$d/ic_launcher_foreground.png
           done
