@@ -754,9 +754,16 @@
     $('#btnTelaCheia').textContent = 'Não disponível neste navegador';
   }
 
+  // Dentro do APK a app já ocupa o ecrã todo: esconde este cartão
+  try {
+    if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
+      $('#cartaoTela').hidden = true;
+    }
+  } catch (e) { /* ignora */ }
+
   $('#btnTelaCheia').addEventListener('click', () => {
     try {
-      const r = emTela() ? sairTela.call(document) : pedirTela.call(elTela);
+      const r = emTela() ? sairTela.call(document) : pedirTela.call(elTela, { navigationUI: 'hide' });
       if (r && r.catch) r.catch(() => aviso('Não foi possível mudar o modo de ecrã.'));
     } catch (e) {
       aviso('Não foi possível mudar o modo de ecrã.');
