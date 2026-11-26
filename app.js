@@ -133,6 +133,26 @@
     return d;
   }
   const numeroValido = n => /^\d{9}$/.test(n);
+
+  // Bloqueio de números: cada operadora só aceita os seus prefixos (muda aqui se for preciso)
+  const PREFIXOS = { Unitel: ['92', '93', '94', '97'], Africell: ['95', '96'] };
+  const operadoraDoNumero = n => Object.keys(PREFIXOS).find(op => PREFIXOS[op].some(p => n.startsWith(p))) || '';
+  const prefixoPossivel = (op, n) => PREFIXOS[op].some(p => n.startsWith(p) || p.startsWith(n));
+
+  // Devolve o motivo do bloqueio, ou '' se o número pode ser carregado.
+  // final=false é usado enquanto escreve (só bloqueia o que já está errado, não o que falta digitar)
+  function erroNumero(op, n, final) {
+    if (!n) return final ? 'Põe o número do cliente.' : '';
+    if (op === 'Zapadinha') return !final || /^\d{9,20}$/.test(n) ? '' : 'Número inválido: mínimo 9 dígitos.';
+    if (!PREFIXOS[op]) return !final || numeroValido(n) ? '' : 'Número inválido: tem de ter 9 dígitos.';
+    if (n.length > 9) return 'Número com mais de 9 dígitos: é da Zapadinha, não da ' + op + '.';
+    if (!prefixoPossivel(op, n)) {
+      const dono = operadoraDoNumero(n);
+      return dono ? 'Este número é da ' + dono + ', não da ' + op + '. Muda a operadora.'
+        : 'Número bloqueado: ' + op + ' começa por ' + PREFIXOS[op].join(', ') + '.';
+    }
+    return final && n.length < 9 ? 'Número inválido: tem de ter 9 dígitos.' : '';
+  }
   const fmtNumero = n => String(n).replace(/^(\d{3})(\d{3})(\d{3})$/, '$1 $2 $3');
 
   let temporizador;
@@ -388,6 +408,7 @@
     marcar($('#segTipo'), 'tipo', tipo);
     $('#valor').value = '';
     $('#numero').classList.remove('erro');
+    mostrarDica('');
     montarOperadoras();
   });
 
@@ -400,12 +421,28 @@
 
   $('#operadora').addEventListener('change', e => {
     escreverLS(KEY_OP + '-' + tipo, e.target.value);
-    $('#numero').classList.remove('erro');
+    verificarNumeroAoVivo();
     ajustarPlaceholder();
     ajustarValor();
   });
 
-  $('#numero').addEventListener('input', () => $('#numero').classList.remove('erro'));
+  function mostrarDica(texto) {
+    const d = $('#dicaNumero');
+    d.textContent = texto || '';
+    d.hidden = !texto;
+  }
+
+  // Verifica o número enquanto se escreve (e quando se muda de operadora)
+  function verificarNumeroAoVivo() {
+    const op = $('#operadora').value;
+    const bruto = String($('#numero').value);
+    const n = op === 'Zapadinha' ? bruto.replace(/\D/g, '') : normalizarNumero(bruto);
+    const motivo = tipo === 'Recarga' ? erroNumero(op, n, false) : '';
+    $('#numero').classList.toggle('erro', !!motivo);
+    mostrarDica(motivo);
+  }
+
+  $('#numero').addEventListener('input', verificarNumeroAoVivo);
 
   /* ---------- carrinho ---------- */
   function carrinhoItemHTML(it, i) {
@@ -448,13 +485,12 @@
       // Zapadinha aceita números com mais de 9 dígitos; as outras operadoras têm 9
       const zap = $('#operadora').value === 'Zapadinha';
       numero = zap ? String($('#numero').value).replace(/\D/g, '') : normalizarNumero($('#numero').value);
-      const ok = zap ? /^\d{9,20}$/.test(numero) : numeroValido(numero);
-      if (!ok) {
+      const motivo = erroNumero($('#operadora').value, numero, true);
+      if (motivo) {
         $('#numero').classList.add('erro');
+        mostrarDica(motivo);
         $('#numero').focus();
-        aviso(!numero ? 'Põe o número do cliente.'
-          : zap ? 'Número inválido: mínimo 9 dígitos.'
-          : 'Número inválido: tem de ter 9 dígitos.');
+        aviso(motivo);
         return;
       }
     }

@@ -1,5 +1,5 @@
 // Muda este número sempre que atualizares algum ficheiro da app
-const CACHE = 'saldar-life-v19';
+const CACHE = 'saldar-life-v22';
 
 const FICHEIROS = [
   './',
