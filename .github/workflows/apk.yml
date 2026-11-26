@@ -32,7 +32,7 @@ jobs:
       - name: Instalar Capacitor
         run: |
           npm init -y
-          npm install @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/filesystem@7 @capacitor/share@7
+          npm install @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7
 
       - name: Criar o projeto Android
         run: |
@@ -67,23 +67,81 @@ jobs:
             rm -f $RES/mipmap-$d/ic_launcher_foreground.png
           done
 
-      - name: Pôr a app em tela cheia (esconde as barras do Android)
+      - name: Permitir partilhar ficheiros (pasta de cache)
+        run: |
+          mkdir -p android/app/src/main/res/xml
+          cat > android/app/src/main/res/xml/file_paths.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <paths xmlns:android="http://schemas.android.com/apk/res/android">
+            <cache-path name="cache" path="." />
+            <files-path name="files" path="." />
+            <external-path name="external" path="." />
+          </paths>
+          EOF
+
+      - name: Tela cheia e ponte para partilhar ficheiros
         run: |
           cat > android/app/src/main/java/ao/saldar/life/MainActivity.java <<'EOF'
           package ao.saldar.life;
 
+          import android.content.Intent;
+          import android.net.Uri;
           import android.os.Build;
           import android.os.Bundle;
           import android.view.WindowManager;
+          import android.webkit.JavascriptInterface;
+          import androidx.core.content.FileProvider;
           import androidx.core.view.WindowCompat;
           import androidx.core.view.WindowInsetsCompat;
           import androidx.core.view.WindowInsetsControllerCompat;
           import com.getcapacitor.BridgeActivity;
+          import java.io.File;
+          import java.io.FileOutputStream;
 
           public class MainActivity extends BridgeActivity {
+
+            // A app chama window.SaldarNativo.partilhar(...) para guardar/enviar um ficheiro
+            public class PonteSaldar {
+              @JavascriptInterface
+              public String partilhar(String nome, String texto, String titulo, String mime) {
+                try {
+                  String limpo = nome.replaceAll("[^A-Za-z0-9._-]", "_");
+                  File pasta = new File(getCacheDir(), "partilha");
+                  if (!pasta.exists()) {
+                    pasta.mkdirs();
+                  }
+                  File ficheiro = new File(pasta, limpo);
+                  FileOutputStream saida = new FileOutputStream(ficheiro);
+                  saida.write(texto.getBytes("UTF-8"));
+                  saida.close();
+
+                  final Uri uri = FileProvider.getUriForFile(
+                    MainActivity.this, getPackageName() + ".fileprovider", ficheiro);
+                  final String tipo = mime;
+                  final String tit = titulo;
+
+                  runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                      Intent i = new Intent(Intent.ACTION_SEND);
+                      i.setType(tipo);
+                      i.putExtra(Intent.EXTRA_STREAM, uri);
+                      i.putExtra(Intent.EXTRA_SUBJECT, tit);
+                      i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                      startActivity(Intent.createChooser(i, tit));
+                    }
+                  });
+                  return "ok";
+                } catch (Exception e) {
+                  return "erro: " + e.getMessage();
+                }
+              }
+            }
+
             @Override
             public void onCreate(Bundle savedInstanceState) {
               super.onCreate(savedInstanceState);
+              getBridge().getWebView().addJavascriptInterface(new PonteSaldar(), "SaldarNativo");
               if (Build.VERSION.SDK_INT >= 28) {
                 getWindow().getAttributes().layoutInDisplayCutoutMode =
                   WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
