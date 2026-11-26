@@ -667,25 +667,33 @@
   });
 
   /* ---------- backup, importar, CSV ---------- */
-  // Dentro do APK não há "descarregar": usa o menu de partilha do Android (guardar, WhatsApp, e-mail…)
-  const nativo = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-  let pluginFS = null;
-  let pluginShare = null;
+  // Dentro do APK não há "descarregar": a ponte do APK abre o menu de partilha do Android
+  // (guardar, WhatsApp, e-mail…). Sem ela, o ficheiro não consegue sair da app.
+  const emApk = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  const temPonte = () => !!(window.SaldarNativo && typeof window.SaldarNativo.partilhar === 'function');
+  const nativo = () => emApk() || temPonte();
+  const resumoErro = err => String((err && err.message) || err).slice(0, 80);
 
-  async function partilharNativo(nome, texto, titulo) {
-    pluginFS = pluginFS || window.Capacitor.registerPlugin('Filesystem');
-    pluginShare = pluginShare || window.Capacitor.registerPlugin('Share');
-    await pluginFS.writeFile({ path: nome, data: texto, directory: 'CACHE', encoding: 'utf8' });
-    const r = await pluginFS.getUri({ path: nome, directory: 'CACHE' });
-    await pluginShare.share({ title: titulo || nome, url: r.uri, dialogTitle: titulo || 'Guardar ou enviar' });
+  function partilharNativo(nome, texto, titulo, mime) {
+    return new Promise((resolve, reject) => {
+      if (!temPonte()) {
+        reject(new Error('APK desatualizado: constrói outra vez com o apk.yml novo'));
+        return;
+      }
+      try {
+        const r = window.SaldarNativo.partilhar(nome, texto, titulo || nome, String(mime || 'application/json').split(';')[0]);
+        if (r === 'ok') resolve();
+        else reject(new Error(r));
+      } catch (e) {
+        reject(e);
+      }
+    });
   }
-
-  const foiCancelado = err => /cancel/i.test(String((err && (err.message || err.name)) || err));
 
   function baixar(nome, texto, mime) {
     if (nativo()) {
-      partilharNativo(nome, texto).catch(err => {
-        if (!foiCancelado(err)) aviso('Não foi possível guardar o ficheiro.');
+      partilharNativo(nome, texto, nome, mime).catch(err => {
+        aviso('Não foi possível guardar: ' + resumoErro(err));
       });
       return;
     }
@@ -742,10 +750,10 @@
 
     if (nativo()) {
       try {
-        await partilharNativo(base + '.json', texto, titulo);
+        await partilharNativo(base + '.json', texto, titulo, 'application/json');
         marcarBackupFeito();
       } catch (err) {
-        if (!foiCancelado(err)) aviso('Não foi possível partilhar.');
+        aviso('Não foi possível partilhar: ' + resumoErro(err));
       }
       return;
     }
