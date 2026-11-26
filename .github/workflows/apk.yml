@@ -84,8 +84,15 @@ jobs:
           cat > android/app/src/main/java/ao/saldar/life/MainActivity.java <<'EOF'
           package ao.saldar.life;
 
+          import android.content.ActivityNotFoundException;
+          import android.content.Context;
           import android.content.Intent;
           import android.net.Uri;
+          import android.print.PrintAttributes;
+          import android.print.PrintDocumentAdapter;
+          import android.print.PrintManager;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
           import android.os.Build;
           import android.os.Bundle;
           import android.view.WindowManager;
@@ -99,6 +106,8 @@ jobs:
           import java.io.FileOutputStream;
 
           public class MainActivity extends BridgeActivity {
+
+            private WebView webImpressao;
 
             // A app chama window.SaldarNativo.partilhar(...) para guardar/enviar um ficheiro
             public class PonteSaldar {
@@ -129,6 +138,70 @@ jobs:
                       i.putExtra(Intent.EXTRA_SUBJECT, tit);
                       i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                       startActivity(Intent.createChooser(i, tit));
+                    }
+                  });
+                  return "ok";
+                } catch (Exception e) {
+                  return "erro: " + e.getMessage();
+                }
+              }
+
+              // Envia texto simples (tenta abrir o WhatsApp; se não houver, mostra o menu)
+              @JavascriptInterface
+              public String partilharTexto(String texto, String titulo) {
+                try {
+                  final String t = texto;
+                  final String tit = titulo;
+                  runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                      Intent i = new Intent(Intent.ACTION_SEND);
+                      i.setType("text/plain");
+                      i.putExtra(Intent.EXTRA_TEXT, t);
+                      try {
+                        i.setPackage("com.whatsapp");
+                        startActivity(i);
+                      } catch (ActivityNotFoundException e1) {
+                        i.setPackage(null);
+                        startActivity(Intent.createChooser(i, tit));
+                      }
+                    }
+                  });
+                  return "ok";
+                } catch (Exception e) {
+                  return "erro: " + e.getMessage();
+                }
+              }
+
+              // Abre o menu de impressão do Android (permite "Guardar como PDF")
+              @JavascriptInterface
+              public String imprimir(String html, String nome) {
+                try {
+                  final String h = html;
+                  final String n = nome;
+                  runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                      try {
+                        final WebView wv = new WebView(MainActivity.this);
+                        final boolean[] feito = new boolean[] { false };
+                        wv.setWebViewClient(new WebViewClient() {
+                          @Override
+                          public void onPageFinished(WebView view, String url) {
+                            if (feito[0]) {
+                              return;
+                            }
+                            feito[0] = true;
+                            PrintManager pm = (PrintManager) getSystemService(Context.PRINT_SERVICE);
+                            PrintDocumentAdapter ad = view.createPrintDocumentAdapter(n);
+                            pm.print(n, ad, new PrintAttributes.Builder().build());
+                          }
+                        });
+                        webImpressao = wv;
+                        wv.loadDataWithBaseURL(null, h, "text/html", "UTF-8", null);
+                      } catch (Exception e) {
+                        // ignora
+                      }
                     }
                   });
                   return "ok";
