@@ -869,6 +869,119 @@
     aviso('CSV criado ✓');
   });
 
+  /* ---------- relatório do dia ---------- */
+  const REL_CSS = '.rel{font-family:Arial,Helvetica,sans-serif;color:#111;font-size:13px}' +
+    '.rel h1{font-size:20px;margin:0 0 2px}.rel .sub{color:#555;margin:0 0 12px}' +
+    '.rel table{width:100%;border-collapse:collapse;margin:8px 0}' +
+    '.rel th,.rel td{padding:5px 4px;border-bottom:1px solid #ddd;text-align:left}' +
+    '.rel th{font-size:11px;text-transform:uppercase;color:#555}' +
+    '.rel .d{text-align:right;white-space:nowrap}' +
+    '.rel .res td{font-size:14px}.rel .tot td{font-weight:bold;border-top:2px solid #111;border-bottom:0}' +
+    '.rel h2{font-size:14px;margin:14px 0 2px}';
+
+  function dadosRelatorio() {
+    const lista = vendas.filter(v => ehMinha(v) && chave(v.ts) === hoje()).sort((a, b) => a.ts - b.ts);
+    const porPag = {};
+    PAGAMENTOS.forEach(p => { porPag[p] = 0; });
+    let total = 0;
+    let lucro = 0;
+    for (const v of lista) {
+      total += v.valor;
+      lucro += lucroDe(v);
+      porPag[v.pagamento] = (porPag[v.pagamento] || 0) + v.valor;
+    }
+    const dataTxt = new Date().toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    return { lista, porPag, total, lucro, dataTxt, nVendas: new Set(lista.map(chaveVenda)).size, nome: nomeTel || 'Este telefone' };
+  }
+
+  function descItem(v) {
+    return v.tipo === 'Cartão' ? 'Cartão ' + v.operadora : 'Recarga ' + v.operadora;
+  }
+
+  function htmlRelatorio(d) {
+    const linhas = d.lista.map(v => '<tr><td>' + hora(v.ts) + '</td><td>' + esc(descItem(v)) +
+      (v.numero ? '<br><small>' + esc(fmtNumero(v.numero)) + '</small>' : '') + '</td><td>' + esc(v.pagamento) +
+      '</td><td class="d">' + esc(kz(v.valor)) + '</td></tr>').join('');
+    const pags = PAGAMENTOS.map(p => '<tr class="res"><td>' + p + '</td><td class="d">' + esc(kz(d.porPag[p] || 0)) + '</td></tr>').join('');
+    return '<div class="rel"><h1>Relatório de vendas</h1>' +
+      '<p class="sub">' + esc(d.nome) + ' · ' + esc(d.dataTxt) + '</p>' +
+      '<table class="res"><tr class="res"><td>Vendas</td><td class="d">' + d.nVendas + '</td></tr>' + pags +
+      '<tr class="tot"><td>Total vendido</td><td class="d">' + esc(kz(d.total)) + '</td></tr>' +
+      '<tr class="res"><td>Lucro</td><td class="d">' + esc(kz(d.lucro)) + '</td></tr></table>' +
+      '<h2>Detalhe</h2><table><tr><th>Hora</th><th>Produto</th><th>Pagamento</th><th class="d">Valor</th></tr>' + linhas + '</table></div>';
+  }
+
+  function textoRelatorio(d) {
+    const l = ['*Relatório de vendas*', d.nome + ' · ' + d.dataTxt, '',
+      'Vendas: ' + d.nVendas, 'Total vendido: ' + kz(d.total), 'Lucro: ' + kz(d.lucro), ''];
+    PAGAMENTOS.forEach(p => l.push(p + ': ' + kz(d.porPag[p] || 0)));
+    l.push('', 'Detalhe:');
+    for (const v of d.lista) {
+      l.push(hora(v.ts) + ' ' + descItem(v) + (v.numero ? ' ' + fmtNumero(v.numero) : '') + ' - ' + kz(v.valor) + ' (' + v.pagamento + ')');
+    }
+    return l.join('\n');
+  }
+
+  function abrirRelatorio() {
+    const d = dadosRelatorio();
+    if (!d.lista.length) { aviso('Ainda não há vendas hoje.'); return; }
+    $('#corpoRelatorio').innerHTML = '<style>' + REL_CSS + '</style>' + htmlRelatorio(d);
+    $('#relatorio').hidden = false;
+  }
+
+  function imprimirRelatorio() {
+    const d = dadosRelatorio();
+    if (!d.lista.length) { aviso('Ainda não há vendas hoje.'); return; }
+    const doc = '<!doctype html><html><head><meta charset="utf-8"><title>Relatório ' + hoje() + '</title><style>' +
+      REL_CSS + '@page{margin:12mm}body{margin:0}</style></head><body>' + htmlRelatorio(d) + '</body></html>';
+    const nomeDoc = 'Relatorio-' + hoje();
+    if (window.SaldarNativo && typeof window.SaldarNativo.imprimir === 'function') {
+      try {
+        const r = window.SaldarNativo.imprimir(doc, nomeDoc);
+        if (r !== 'ok') aviso('Não foi possível imprimir: ' + resumoErro(r));
+      } catch (e) {
+        aviso('Não foi possível imprimir: ' + resumoErro(e));
+      }
+      return;
+    }
+    if (emApk()) { aviso('APK desatualizado: constrói outra vez com o apk.yml novo'); return; }
+    const f = document.createElement('iframe');
+    f.style.cssText = 'position:fixed;left:-9999px;width:800px;height:600px;border:0';
+    f.onload = () => {
+      try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { aviso('Não foi possível imprimir.'); }
+      setTimeout(() => f.remove(), 60000);
+    };
+    f.srcdoc = doc;
+    document.body.appendChild(f);
+  }
+
+  function enviarRelatorioZap() {
+    const d = dadosRelatorio();
+    if (!d.lista.length) { aviso('Ainda não há vendas hoje.'); return; }
+    const texto = textoRelatorio(d);
+    if (window.SaldarNativo && typeof window.SaldarNativo.partilharTexto === 'function') {
+      try {
+        const r = window.SaldarNativo.partilharTexto(texto, 'Relatório de vendas');
+        if (r !== 'ok') aviso('Não foi possível enviar: ' + resumoErro(r));
+      } catch (e) {
+        aviso('Não foi possível enviar: ' + resumoErro(e));
+      }
+      return;
+    }
+    if (emApk()) { aviso('APK desatualizado: constrói outra vez com o apk.yml novo'); return; }
+    if (navigator.share) {
+      navigator.share({ text: texto, title: 'Relatório de vendas' }).catch(() => { /* cancelado */ });
+    } else {
+      window.open('https://wa.me/?text=' + encodeURIComponent(texto), '_blank');
+    }
+  }
+
+  $('#btnRelatorio').addEventListener('click', abrirRelatorio);
+  $('#btnFecharRel').addEventListener('click', () => { $('#relatorio').hidden = true; });
+  $('#relatorio').addEventListener('click', e => { if (e.target.id === 'relatorio') $('#relatorio').hidden = true; });
+  $('#btnImprimirRel').addEventListener('click', imprimirRelatorio);
+  $('#btnZapRel').addEventListener('click', enviarRelatorioZap);
+
   $('#btnApagarTudo').addEventListener('click', () => {
     if (!vendas.length) { aviso('Não há vendas para apagar.'); return; }
     if (!confirm('Apagar TODAS as ' + vendas.length + ' vendas? Não dá para desfazer.')) return;
